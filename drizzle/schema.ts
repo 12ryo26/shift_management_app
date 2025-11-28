@@ -64,15 +64,14 @@ export type InsertShiftPeriod = typeof shiftPeriods.$inferInsert;
 
 /**
  * Shift request - stores staff's shift preferences for each day
+ * requestType: off (休み), morning (モーニング 8:00-14:00), early (早番 10:00-16:00), late (遅番 16:00-23:00), all (ALL 8:00-23:00)
  */
 export const shiftRequests = mysqlTable("shiftRequests", {
   id: int("id").autoincrement().primaryKey(),
   staffId: int("staffId").notNull(),
   periodId: int("periodId").notNull(),
-  requestDate: timestamp("requestDate").notNull(), // The date the staff is requesting for
-  requestType: mysqlEnum("requestType", ["work", "off", "flexible"]).default("flexible").notNull(),
-  preferredStartTime: varchar("preferredStartTime", { length: 5 }), // HH:mm format
-  preferredEndTime: varchar("preferredEndTime", { length: 5 }), // HH:mm format
+  requestDate: timestamp("requestDate").notNull(),
+  requestType: mysqlEnum("requestType", ["off", "morning", "early", "late", "all"]).notNull(),
   notes: text("notes"),
   submittedAt: timestamp("submittedAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -89,6 +88,7 @@ export const finalShifts = mysqlTable("finalShifts", {
   staffId: int("staffId").notNull(),
   periodId: int("periodId").notNull(),
   shiftDate: timestamp("shiftDate").notNull(),
+  shiftType: mysqlEnum("shiftType", ["morning", "early", "late", "all"]).notNull(),
   startTime: varchar("startTime", { length: 5 }).notNull(), // HH:mm format
   endTime: varchar("endTime", { length: 5 }).notNull(), // HH:mm format
   status: mysqlEnum("status", ["scheduled", "confirmed", "cancelled"]).default("scheduled").notNull(),

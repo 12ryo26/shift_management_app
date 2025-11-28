@@ -82,9 +82,7 @@ export const appRouter = router({
         periodId: z.number(),
         requests: z.array(z.object({
           requestDate: z.date(),
-          requestType: z.enum(["work", "off", "flexible"]),
-          preferredStartTime: z.string().optional(),
-          preferredEndTime: z.string().optional(),
+          requestType: z.enum(["off", "morning", "early", "late", "all"]),
           notes: z.string().optional(),
         })),
       }))
@@ -109,8 +107,6 @@ export const appRouter = router({
           periodId: input.periodId,
           requestDate: req.requestDate,
           requestType: req.requestType,
-          preferredStartTime: req.preferredStartTime || null,
-          preferredEndTime: req.preferredEndTime || null,
           notes: req.notes || null,
         }));
 
@@ -153,12 +149,22 @@ export const appRouter = router({
         return getFinalShiftsByPeriod(input.periodId);
       }),
 
+    autoCreate: protectedProcedure
+      .input(z.object({ periodId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        // Only admins can create shifts
+        if (ctx.user.role !== "admin") throw new Error("Unauthorized");
+        const { createShiftsForPeriod } = await import("./shiftCreationLogic");
+        return createShiftsForPeriod(input.periodId);
+      }),
+
     create: protectedProcedure
       .input(z.object({
         periodId: z.number(),
         shifts: z.array(z.object({
           staffId: z.number(),
           shiftDate: z.date(),
+          shiftType: z.enum(["morning", "early", "late", "all"]),
           startTime: z.string(),
           endTime: z.string(),
         })),
@@ -178,6 +184,7 @@ export const appRouter = router({
           staffId: shift.staffId,
           periodId: input.periodId,
           shiftDate: shift.shiftDate,
+          shiftType: shift.shiftType,
           startTime: shift.startTime,
           endTime: shift.endTime,
           status: "scheduled" as const,

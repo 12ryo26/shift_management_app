@@ -2,7 +2,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -10,11 +9,19 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
+const SHIFT_TYPES = {
+  off: { label: "休み", color: "bg-gray-100" },
+  morning: { label: "モーニング (7:30-15:00)", color: "bg-blue-100" },
+  early: { label: "早番 (10:00-16:00)", color: "bg-green-100" },
+  late: { label: "遅番 (17:00-23:00)", color: "bg-orange-100" },
+  all: { label: "ALL (7:30-23:00)", color: "bg-purple-100" },
+};
+
 export default function ShiftInput() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [currentPeriod, setCurrentPeriod] = useState<any>(null);
-  const [shiftRequests, setShiftRequests] = useState<Map<string, { type: string; startTime: string; endTime: string }>>(new Map());
+  const [shiftRequests, setShiftRequests] = useState<Map<string, string>>(new Map());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: period, isLoading: periodLoading } = trpc.shiftPeriod.getCurrent.useQuery();
@@ -42,11 +49,7 @@ export default function ShiftInput() {
       const requestMap = new Map();
       existingRequests.forEach(req => {
         const dateStr = new Date(req.requestDate).toISOString().split('T')[0];
-        requestMap.set(dateStr, {
-          type: req.requestType,
-          startTime: req.preferredStartTime || "",
-          endTime: req.preferredEndTime || "",
-        });
+        requestMap.set(dateStr, req.requestType);
       });
       setShiftRequests(requestMap);
     }
@@ -54,23 +57,11 @@ export default function ShiftInput() {
 
   const handleShiftChange = (date: string, type: string) => {
     const newRequests = new Map(shiftRequests);
-    if (newRequests.has(date)) {
-      const existing = newRequests.get(date)!;
-      if (existing.type === type) {
-        newRequests.delete(date);
-      } else {
-        newRequests.set(date, { ...existing, type });
-      }
+    if (newRequests.get(date) === type) {
+      newRequests.delete(date);
     } else {
-      newRequests.set(date, { type, startTime: "", endTime: "" });
+      newRequests.set(date, type);
     }
-    setShiftRequests(newRequests);
-  };
-
-  const handleTimeChange = (date: string, field: "startTime" | "endTime", value: string) => {
-    const newRequests = new Map(shiftRequests);
-    const existing = newRequests.get(date) || { type: "flexible", startTime: "", endTime: "" };
-    newRequests.set(date, { ...existing, [field]: value });
     setShiftRequests(newRequests);
   };
 
@@ -82,11 +73,9 @@ export default function ShiftInput() {
 
     setIsSubmitting(true);
     try {
-      const requests = Array.from(shiftRequests.entries()).map(([dateStr, data]) => ({
+      const requests = Array.from(shiftRequests.entries()).map(([dateStr, type]) => ({
         requestDate: new Date(dateStr),
-        requestType: data.type as "work" | "off" | "flexible",
-        preferredStartTime: data.startTime || undefined,
-        preferredEndTime: data.endTime || undefined,
+        requestType: type as "off" | "morning" | "early" | "late" | "all",
       }));
 
       await submitMutation.mutateAsync({
@@ -149,10 +138,10 @@ export default function ShiftInput() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
+          <div className="space-y-4">
             {dateRange.map(date => {
               const dateStr = date.toISOString().split('T')[0];
-              const request = shiftRequests.get(dateStr);
+              const selectedType = shiftRequests.get(dateStr);
               const dayName = date.toLocaleDateString('ja-JP', { weekday: 'short' });
 
               return (
@@ -163,66 +152,20 @@ export default function ShiftInput() {
                     </h3>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`work-${dateStr}`}
-                          checked={request?.type === "work"}
-                          onCheckedChange={() => handleShiftChange(dateStr, "work")}
-                        />
-                        <Label htmlFor={`work-${dateStr}`} className="cursor-pointer">
-                          出勤
-                        </Label>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`off-${dateStr}`}
-                          checked={request?.type === "off"}
-                          onCheckedChange={() => handleShiftChange(dateStr, "off")}
-                        />
-                        <Label htmlFor={`off-${dateStr}`} className="cursor-pointer">
-                          休み
-                        </Label>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`flexible-${dateStr}`}
-                          checked={request?.type === "flexible"}
-                          onCheckedChange={() => handleShiftChange(dateStr, "flexible")}
-                        />
-                        <Label htmlFor={`flexible-${dateStr}`} className="cursor-pointer">
-                          相談
-                        </Label>
-                      </div>
-                    </div>
-
-                    {request?.type === "work" && (
-                      <div className="flex items-center space-x-4 ml-4">
-                        <div className="flex items-center space-x-2">
-                          <Label htmlFor={`start-${dateStr}`}>開始時間</Label>
-                          <Input
-                            id={`start-${dateStr}`}
-                            type="time"
-                            value={request.startTime}
-                            onChange={(e) => handleTimeChange(dateStr, "startTime", e.target.value)}
-                            className="w-32"
-                          />
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Label htmlFor={`end-${dateStr}`}>終了時間</Label>
-                          <Input
-                            id={`end-${dateStr}`}
-                            type="time"
-                            value={request.endTime}
-                            onChange={(e) => handleTimeChange(dateStr, "endTime", e.target.value)}
-                            className="w-32"
-                          />
-                        </div>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {Object.entries(SHIFT_TYPES).map(([type, { label, color }]) => (
+                      <button
+                        key={type}
+                        onClick={() => handleShiftChange(dateStr, type)}
+                        className={`p-3 rounded-lg border-2 transition-all ${
+                          selectedType === type
+                            ? `border-blue-500 ${color}`
+                            : "border-gray-200 bg-white hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="text-sm font-medium">{label}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
               );
