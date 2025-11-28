@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, staff, shiftPeriods, shiftRequests, finalShifts } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,116 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Staff queries
+export async function getOrCreateStaffByUserId(userId: number, staffName: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db.select().from(staff).where(eq(staff.userId, userId)).limit(1);
+  if (existing.length > 0) return existing[0];
+
+  await db.insert(staff).values({
+    userId,
+    staffName,
+    isActive: true,
+  });
+
+  const result = await db.select().from(staff).where(eq(staff.userId, userId)).limit(1);
+  return result[0];
+}
+
+export async function getStaffByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(staff).where(eq(staff.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// Shift period queries
+export async function getCurrentShiftPeriod() {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const now = new Date();
+  const result = await db
+    .select()
+    .from(shiftPeriods)
+    .where(and(
+      lte(shiftPeriods.startDate, now),
+      gte(shiftPeriods.endDate, now),
+      eq(shiftPeriods.status, "open")
+    ))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getShiftPeriodById(periodId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(shiftPeriods).where(eq(shiftPeriods.id, periodId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getShiftPeriodsByYearMonth(year: number, month: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(shiftPeriods)
+    .where(and(
+      eq(shiftPeriods.year, year),
+      eq(shiftPeriods.month, month)
+    ));
+}
+
+// Shift request queries
+export async function getShiftRequestsByStaffAndPeriod(staffId: number, periodId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(shiftRequests)
+    .where(and(
+      eq(shiftRequests.staffId, staffId),
+      eq(shiftRequests.periodId, periodId)
+    ));
+}
+
+export async function getShiftRequestsByPeriod(periodId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(shiftRequests)
+    .where(eq(shiftRequests.periodId, periodId));
+}
+
+// Final shift queries
+export async function getFinalShiftsByStaffAndPeriod(staffId: number, periodId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(finalShifts)
+    .where(and(
+      eq(finalShifts.staffId, staffId),
+      eq(finalShifts.periodId, periodId)
+    ));
+}
+
+export async function getFinalShiftsByPeriod(periodId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(finalShifts)
+    .where(eq(finalShifts.periodId, periodId));
+}
