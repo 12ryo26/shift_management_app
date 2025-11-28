@@ -118,7 +118,7 @@ export async function getStaffByUserId(userId: number) {
 // Shift period queries
 export async function getCurrentShiftPeriod() {
   const db = await getDb();
-  if (!db) return undefined;
+  if (!db) return null;
 
   const now = new Date();
   const result = await db
@@ -131,7 +131,7 @@ export async function getCurrentShiftPeriod() {
     ))
     .limit(1);
 
-  return result.length > 0 ? result[0] : undefined;
+  return result.length > 0 ? result[0] : null;
 }
 
 export async function getShiftPeriodById(periodId: number) {
