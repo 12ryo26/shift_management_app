@@ -1,5 +1,6 @@
 import { eq, and, gte, lte } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { InsertUser, users, staff, shiftPeriods, shiftRequests, finalShifts } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -9,7 +10,8 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const client = postgres(process.env.DATABASE_URL);
+      _db = drizzle(client);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -68,7 +70,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
+    // For PostgreSQL, we use insert with onConflict
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
       set: updateSet,
     });
   } catch (error) {
@@ -92,19 +96,20 @@ export async function getUserByOpenId(openId: string) {
 // Staff queries
 export async function getOrCreateStaffByUserId(userId: number, staffName: string) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
+  if (!db) return undefined;
 
   const existing = await db.select().from(staff).where(eq(staff.userId, userId)).limit(1);
-  if (existing.length > 0) return existing[0];
+  if (existing.length > 0) {
+    return existing[0];
+  }
 
-  await db.insert(staff).values({
+  const result = await db.insert(staff).values({
     userId,
     staffName,
     isActive: true,
-  });
+  }).returning();
 
-  const result = await db.select().from(staff).where(eq(staff.userId, userId)).limit(1);
-  return result[0];
+  return result.length > 0 ? result[0] : undefined;
 }
 
 export async function getStaffByUserId(userId: number) {
